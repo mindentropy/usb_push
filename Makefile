@@ -1,5 +1,5 @@
 CFLAGS=-g -Wall
-LDFLAGS=-lusb
+LDFLAGS=-lusb-1.0
 
 all: usb_push cscope_create
 
@@ -15,4 +15,4 @@ cscope_create:
 .PHONY: clean
 
 clean:
-	rm -v *.o usb_push *.out
+	rm -fv *.o usb_push *.out
