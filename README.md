@@ -1,4 +1,4 @@
-# usb_push
+# usb_push  [![Build Status](https://travis-ci.org/mindentropy/usb_push.svg?branch=master)](https://travis-ci.org/mindentropy/usb_push)
 USB push for S3C2440
 
 This utility is used to push the binary to the MINI2440 RAM in SuperVivi mode. The mode is triggered by setting the switch to NOR mode and booting the S3C2440.
