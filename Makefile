@@ -1,7 +1,7 @@
 CFLAGS=-g -Wall
 LDFLAGS=-lusb-1.0
 
-all: usb_push cscope_create
+all: cscope_create usb_push
 
 usb_push: usb_push.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)

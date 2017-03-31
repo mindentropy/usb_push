@@ -39,19 +39,51 @@ static struct libusb_device * find_s3c2440_device(void)
 
 int main(int argc, char **argv)
 {
-	struct libusb_device *s3c_usb_dev;
+	struct libusb_device *s3c_usb_dev = NULL;
+	libusb_device_handle *handle = NULL;
+	int retval = 0;
 
 	libusb_init(&usb_context);
 
 	s3c_usb_dev = find_s3c2440_device();
 
-	if(s3c_usb_dev != NULL) {
-		printf("S3C2440 device found\n");
-	} else {
+	if(s3c_usb_dev == NULL) {
 		printf("S3C2440 device not found\n");
+		goto end;
 	}
 
-	libusb_exit(usb_context);
+	printf("S3C2440 device found\n");
+
+	if((retval = libusb_open(s3c_usb_dev,
+				&handle)) != 0) {
+		printf("Could not open device\n");
+
+		switch(retval) {
+			case LIBUSB_ERROR_ACCESS:
+				printf("No access\n");
+				break;
+			case LIBUSB_ERROR_NO_DEVICE:
+				printf("No device\n");
+				break;
+			case LIBUSB_ERROR_NO_MEM:
+				printf("No memory\n");
+				break;
+		}
+		goto end;
+	}
+
+	/* Claiming interface 0 as per lsusb there is only 1 interface starting with 0*/
+	if(libusb_claim_interface(handle,0) != 0) {
+		printf("Could not claim interface\n");
+		goto end;
+	}
+
+	printf("Claimed interface\n");
+
+
+
+end:
+//	libusb_exit(usb_context);
 
 	return 0;
 }
