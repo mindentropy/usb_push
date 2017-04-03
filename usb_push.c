@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #include <libusb-1.0/libusb.h>
 #include "usb_push.h"
@@ -63,8 +64,42 @@ static int send_data(
 {
 	int ret_val = 0;
 	uint16_t csum = checksum(map_addr, len);
+	uint8_t *buff;
+
+	/*
+	 * The data contains the following header:
+	 * RAM address: 4 bytes
+	 * Data length: 4 bytes
+	 *
+	 * The data contains the following footer:
+	 * Checksum: 2 bytes
+	 *
+	 * The extra bytes apart from the data is 4 + 4 + 2 = 10 bytes
+	 * Hence total size = 10 bytes (header + footer) + data_size
+	 *
+	 */
+
+	uint32_t total_size = len + 10;
 
 	printf("Check sum : 0x%4x\n",csum);
+
+	buff = malloc(total_size);
+
+	if(buff == NULL) {
+		return -ENOMEM;
+	}
+
+	buff[0] = ram_base_addr & 0xFF;
+	buff[1] = (ram_base_addr >> 8) & 0xFF;
+	buff[2] = (ram_base_addr >> 16) & 0xFF;
+	buff[3] = (ram_base_addr >> 24) & 0xFF;
+
+	buff[4] = (total_size) & 0xFF;
+	buff[5] = (total_size >> 8) & 0xFF;
+	buff[6] = (total_size >> 16) & 0xFF;
+	buff[7] = (total_size >> 24) & 0xFF;
+
+
 
 	return ret_val;
 }
