@@ -139,9 +139,24 @@ static int send_data(
 }
 
 
-void print_usage()
+static void print_usage()
 {
 	printf("Usage: usb_push <filename> <ram_base_address> \n");
+}
+
+static void usb_print_error(const char *err_str, int errcode)
+{
+#if defined(LIBUSB_API_VERSION) && (LIBUSB_API_VERSION >= 0x01000104)
+fprintf(stderr,"%s. Reason: %s\n",
+							err_str,
+							libusb_strerror(errcode)
+							);
+#else
+fprintf(stderr,"%s. Error code: %d\n",
+				err_str,
+				errcode
+				);
+#endif
 }
 
 int main(int argc, char **argv)
@@ -163,7 +178,7 @@ int main(int argc, char **argv)
 	s3c_usb_dev = find_s3c2440_device();
 
 	if(s3c_usb_dev == NULL) {
-		printf("MINI2440 device not found\n");
+		fprintf(stderr, "MINI2440 device not found\n");
 		goto end;
 	}
 
@@ -172,8 +187,9 @@ int main(int argc, char **argv)
 	if((retval = libusb_open(s3c_usb_dev,
 				&handle)) != 0) {
 
-		printf("Could not open device ");
-		printf("Reason: %s\n",libusb_strerror(retval));
+		usb_print_error("Could not open device",retval);
+		/*printf("Could not open device ");
+		printf("Reason: %s\n",libusb_strerror(retval));*/
 
 		goto end;
 	}
@@ -181,7 +197,8 @@ int main(int argc, char **argv)
 	/* Claiming interface 0 as per lsusb there is only 1 interface starting with 0*/
 	if(libusb_claim_interface(handle,
 					MINI2440_USB_IF_NUM) != 0) {
-		printf("Could not claim interface\n");
+		usb_print_error("Could not claim interface",retval);
+		/*printf("Could not claim interface\n");*/
 		goto end;
 	}
 
@@ -221,8 +238,9 @@ int main(int argc, char **argv)
 			st.st_size);
 
 	if(retval < 0) {
-		printf("Send data error. Reason: %s\n",
-								libusb_strerror(retval));
+		usb_print_error("Send data error",retval);
+	/*	printf("Send data error. Reason: %s\n",
+								libusb_strerror(retval));*/
 	} else {
 		printf("Data send successful\n");
 	}
