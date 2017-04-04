@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <string.h>
 
 #include <libusb-1.0/libusb.h>
 #include "usb_push.h"
@@ -26,14 +27,14 @@ static struct libusb_device * find_s3c2440_device(void)
 			libusb_get_device_list(usb_context,
 				&usb_dev_list);
 
-	printf("Found %lu devices \n",device_list_size);
+/*	printf("Found %lu devices \n",device_list_size); */
 
-	while(usb_dev_list[i] != NULL) {
+	while((device_list_size != 0) && (usb_dev_list[i] != NULL)) {
 
 		libusb_get_device_descriptor(usb_dev_list[i], &desc);
 
-		if((desc.idVendor == S3C2440_VENDOR_ID) &&
-			(desc.idProduct == S3C2440_PRODUCT_ID)) {
+		if((desc.idVendor == MINI2440_VENDOR_ID) &&
+			(desc.idProduct == MINI2440_PRODUCT_ID)) {
 			return usb_dev_list[i];
 		}
 
@@ -57,6 +58,7 @@ static uint16_t checksum(const uint8_t *data,
 }
 
 static int send_data(
+					libusb_device_handle *handle,
 					uint32_t ram_base_addr,
 					uint8_t *map_addr,
 					uint32_t len
@@ -64,7 +66,9 @@ static int send_data(
 {
 	int ret_val = 0;
 	uint16_t csum = checksum(map_addr, len);
-	uint8_t *buff;
+	uint8_t *buff, *curr;
+	uint32_t remain = 0;
+	int32_t transferred = 0;
 
 	/*
 	 * The data contains the following header:
@@ -81,7 +85,7 @@ static int send_data(
 
 	uint32_t total_size = len + 10;
 
-	printf("Check sum : 0x%4x\n",csum);
+	printf("Checksum : 0x%4x\n",csum);
 
 	buff = malloc(total_size);
 
@@ -99,7 +103,37 @@ static int send_data(
 	buff[6] = (total_size >> 16) & 0xFF;
 	buff[7] = (total_size >> 24) & 0xFF;
 
+	memcpy(buff+8,map_addr,len);
 
+	/* Add an offset of 8 as the buff starts at an offset of 8 i.e. the header */
+	buff[len + 8] = csum & 0xFF;
+	buff[len + 9] = (csum >> 8) & 0xFF;
+
+	printf("Sending file to address: 0x%x having length : %u bytes\n",
+						ram_base_addr,
+						len);
+
+	for(curr = buff; curr < (buff + total_size); curr += WRITE_CHUNK_SIZE) {
+		remain = (buff + total_size) - curr;
+
+		if(remain > WRITE_CHUNK_SIZE) {
+			remain = WRITE_CHUNK_SIZE;
+		}
+
+		ret_val = libusb_bulk_transfer(handle,
+					MINI2440_EP_3_OUT,
+					curr,
+					remain,
+					&transferred,
+					0
+					);
+
+		if(ret_val < 0)
+			break;
+
+	}
+
+	free(buff);
 
 	return ret_val;
 }
@@ -117,6 +151,7 @@ int main(int argc, char **argv)
 	int retval = 0, fd = 0;
 	struct stat st;
 	uint8_t *file_mm = NULL;
+	uint32_t ram_base_addr = 0;
 
 	if(argc != ARG_SIZE) {
 		print_usage();
@@ -128,39 +163,32 @@ int main(int argc, char **argv)
 	s3c_usb_dev = find_s3c2440_device();
 
 	if(s3c_usb_dev == NULL) {
-		printf("S3C2440 device not found\n");
+		printf("MINI2440 device not found\n");
 		goto end;
 	}
 
-	printf("S3C2440 device found\n");
+	printf("MINI2440 device found\n");
 
 	if((retval = libusb_open(s3c_usb_dev,
 				&handle)) != 0) {
-		printf("Could not open device\n");
 
-		switch(retval) {
-			case LIBUSB_ERROR_ACCESS:
-				printf("No access\n");
-				break;
-			case LIBUSB_ERROR_NO_DEVICE:
-				printf("No device\n");
-				break;
-			case LIBUSB_ERROR_NO_MEM:
-				printf("No memory\n");
-				break;
-		}
+		printf("Could not open device ");
+		printf("Reason: %s\n",libusb_strerror(retval));
+
 		goto end;
 	}
 
 	/* Claiming interface 0 as per lsusb there is only 1 interface starting with 0*/
 	if(libusb_claim_interface(handle,
-					S3C2440_USB_IF_NUM) != 0) {
+					MINI2440_USB_IF_NUM) != 0) {
 		printf("Could not claim interface\n");
 		goto end;
 	}
 
-	printf("Claimed interface\n");
+/*	printf("Claimed interface\n"); */
 
+	ram_base_addr = atof(argv[2]);
+	printf("Ram base addr : 0x%x\n",ram_base_addr);
 
 	fd = open(argv[1],O_RDONLY);
 
@@ -187,16 +215,25 @@ int main(int argc, char **argv)
 		goto file_error;
 	}
 
-	send_data(RAM_BASE_ADDR,
-				file_mm,
-				st.st_size);
+	retval = send_data(handle,
+			RAM_BASE_ADDR,
+			file_mm,
+			st.st_size);
+
+	if(retval < 0) {
+		printf("Send data error. Reason: %s\n",
+								libusb_strerror(retval));
+	} else {
+		printf("Data send successful\n");
+	}
 
 	munmap(file_mm,
 			st.st_size);
+	close(fd);
 
 file_error:
 	libusb_release_interface(handle,
-							S3C2440_USB_IF_NUM);
+							MINI2440_USB_IF_NUM);
 end:
 	libusb_free_device_list(usb_dev_list,1);
 	libusb_exit(usb_context);
